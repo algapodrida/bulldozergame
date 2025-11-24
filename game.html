@@ -1,0 +1,953 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <!-- AUTOSCALE PATCH -->
+  <script>
+  window.addEventListener("load", () => {
+    const canvas = document.getElementById("game");
+    if (!canvas) return;
+    function resize() {
+      const scale = Math.min(
+        window.innerWidth / canvas.width,
+        window.innerHeight / canvas.height
+      );
+      canvas.style.transform = `scale(${scale})`;
+      canvas.style.transformOrigin = "top left";
+    }
+    resize();
+    window.addEventListener("resize", resize);
+  });
+  </script>
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Bulldozer Collector - Vista cenital</title>
+  <style>
+    html,body{height:100%;margin:0;background:#222;color:#eee;font-family:system-ui}
+    #gameWrap{display:flex;gap:12px;padding:12px}
+    #hud{width:260px;flex:none}
+    #canvasWrap{flex:1}
+    canvas{display:block;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.6); background-color: #333;}
+    .card{background:#2b2b2b;padding:10px;border-radius:8px;margin-bottom:12px}
+    h2{margin:0 0 8px 0;font-size:16px}
+    .counter{font-size:18px;margin:6px 0}
+    button{width:100%;padding:10px;border-radius:6px;border:0;background:#5b9bd5;color:white;font-weight:600;cursor:pointer}
+    button:disabled{opacity:.4;cursor:not-allowed}
+    .saveSlot{background:#4a4a4a;padding:8px;font-size:13px}
+    .saveSlot.saved{background:#008000; color: #FFF;} /* Color para ranuras con partida guardada */
+    .saveSlot.empty{background:#4a4a4a; color: #EEE;} /* Color para ranuras vacías */
+    .small{font-size:12px;color:#aaa}
+    .row{display:flex;justify-content:space-between;align-items:center}
+    .dual-button{display:flex;gap:2px;margin-bottom:6px}
+    .dual-button button{flex:1;padding:8px;font-size:12px}
+    .dual-button .wood-cost{background:#5b9bd5}
+    .dual-button .gold-cost{background:#d4af37}
+  </style>
+</head>
+<body>
+  <div id="gameWrap">
+    <div id="canvasWrap">
+      <canvas id="game" width="960" height="640"></canvas>
+    </div>
+    <div id="hud">
+      <div class="card">
+        <h2>Recursos</h2>
+        <div class="counter">Madera: <span id="woodCount">0</span></div>
+        <div class="counter">Piedra: <span id="stoneCount">0</span></div>
+        <div class="counter">Oro: <span id="goldCount">0</span></div>
+        <div class="counter">$: <span id="dollarCount">0</span></div>
+        <div class="counter">Renacimientos: <span id="rebirthCount">0</span></div>
+      </div>
+      <div class="card">
+        <h2>Tienda</h2>
+        <div class="small">Azul = Madera/Piedra | Dorado = Oro</div>
+        <div style="height:8px"></div>
+        <div class="dual-button">
+          <button id="buyBtn" class="wood-cost">Normal<br><span id="normalWoodCost">10M 5P</span></button>
+          <button id="buyBtnGold" class="gold-cost">Normal<br><span id="normalGoldCost">5 Oro</span></button>
+        </div>
+        <div class="dual-button">
+          <button id="buyRedBtn" class="wood-cost">Rojo x4<br><span id="redWoodCost">30M 15P</span></button>
+          <button id="buyRedBtnGold" class="gold-cost">Rojo x4<br><span id="redGoldCost">15 Oro</span></button>
+        </div>
+        <div class="dual-button">
+          <button id="buyGrayBtn" class="wood-cost">Gris x10<br><span id="grayWoodCost">120M 60P</span></button>
+          <button id="buyGrayBtnGold" class="gold-cost">Gris x10<br><span id="grayGoldCost">60 Oro</span></button>
+        </div>
+        <div class="dual-button">
+          <button id="buyBelardiBtn" class="wood-cost">Belardi<br><span id="belardiWoodCost">120M 60P</span></button>
+          <button id="buyBelardiBtnGold" class="gold-cost">Belardi<br><span id="belardiGoldCost">60 Oro</span></button>
+        </div>
+        <div style="height:12px"></div>
+        <div class="dual-button">
+          <button id="buyHouseBtn" class="wood-cost">Casa<br><span id="houseWoodCost">50M 30P</span></button>
+          <button id="buyHouseBtnGold" class="gold-cost">Casa<br><span id="houseGoldCost">40 Oro</span></button>
+        </div>
+        <div class="dual-button">
+          <button id="upgradeHouseBtn" class="wood-cost">Mejorar<br><span id="upgradeWoodCost">30M 20P</span></button>
+          <button id="upgradeHouseBtnGold" class="gold-cost">Mejorar<br><span id="upgradeGoldCost">25 Oro</span></button>
+        </div>
+        <div style="height:12px"></div>
+        <button id="craneBtn" style="background:#7b7b7b;padding:6px">Grúa (doble click vende, click der. pausa belardi)</button>
+        <div style="height:8px"></div>
+
+        <div style="display:flex; gap: 4px; align-items: center;">
+            <input type="text" id="cmdInput" placeholder="Comandos..." style="flex: 1; padding:8px; border-radius:4px; border:1px solid #444; background:#1a1a1a; color:#eee; box-sizing:border-box">
+            <button id="focusToggleBtn" style="width: 30px; height: 36px; padding: 0; background: #4a4a4a; border-radius: 4px; font-size: 14px; line-height: 1; flex-shrink: 0; opacity: 0.5;">📌</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Bolsa de Valores</h2>
+        <button id="stockToggle" style="background:#5b7d9b">▼ Mostrar/Ocultar</button>
+        <div id="stockPanel" style="display:none;margin-top:8px">
+          <div class="small">Convierte oro en $ o $ en oro</div>
+          <div style="height:8px"></div>
+          <div class="row"><div>Tasa:</div><div id="exchangeRate">-</div></div>
+          <div style="height:8px"></div>
+          <canvas id="stockChart" width="240" height="120" style="background:#1a1a1a;border-radius:4px"></canvas>
+          <div style="height:8px"></div>
+          <input type="number" id="goldToExchange" placeholder="Oro" style="width:100%;padding:8px;border-radius:4px;border:1px solid #444;background:#1a1a1a;color:#eee;box-sizing:border-box">
+          <div style="height:6px"></div>
+          <button id="exchangeBtn" style="background:#d4af37">Oro → $</button>
+          <div style="height:8px"></div>
+          <input type="number" id="dollarsToExchange" placeholder="$" style="width:100%;padding:8px;border-radius:4px;border:1px solid #444;background:#1a1a1a;color:#eee;box-sizing:border-box">
+          <div style="height:6px"></div>
+          <button id="exchangeBackBtn" style="background:#5b9bd5">$ → Oro</button>
+        </div>
+      </div>
+      
+      <div class="card">
+        <h2>Guardar Partida</h2>
+        <button id="saveToggle" style="background:#5b7d9b">▼ Mostrar/Ocultar</button>
+        <div id="savePanel" style="display:none;margin-top:8px">
+          <div class="small">Click para Guardar | Shift+Click para BORRAR</div>
+          <div style="height:8px"></div>
+          <button id="save1Btn" class="saveSlot" data-slot="1">Ranura 1: Vacía</button><div style="height:4px"></div>
+          <button id="save2Btn" class="saveSlot" data-slot="2">Ranura 2: Vacía</button><div style="height:4px"></div>
+          <button id="save3Btn" class="saveSlot" data-slot="3">Ranura 3: Vacía</button><div style="height:4px"></div>
+          <button id="save4Btn" class="saveSlot" data-slot="4">Ranura 4: Vacía</button><div style="height:4px"></div>
+          <button id="save5Btn" class="saveSlot" data-slot="5">Ranura 5: Vacía</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Cargar Partida</h2>
+        <button id="loadToggle" style="background:#5b7d9b">▼ Mostrar/Ocultar</button>
+        <div id="loadPanel" style="display:none;margin-top:8px">
+          <div class="small">Click para Cargar | Shift+Click para BORRAR</div>
+          <div style="height:8px"></div>
+          <button id="load1Btn" class="saveSlot" data-slot="1">Ranura 1: Vacía</button><div style="height:4px"></div>
+          <button id="load2Btn" class="saveSlot" data-slot="2">Ranura 2: Vacía</button><div style="height:4px"></div>
+          <button id="load3Btn" class="saveSlot" data-slot="3">Ranura 3: Vacía</button><div style="height:4px"></div>
+          <button id="load4Btn" class="saveSlot" data-slot="4">Ranura 4: Vacía</button><div style="height:4px"></div>
+          <button id="load5Btn" class="saveSlot" data-slot="5">Ranura 5: Vacía</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Renacer</h2>
+        <div class="small">El oro NO se pierde. Queda 1 bulldozer.</div>
+        <div style="height:8px"></div>
+        <button id="rebirthBtn">Renacer (necesitas 5 bulldozers)</button>
+      </div>
+      <div class="card">
+        <h2>Controles</h2>
+        <div class="small">WASD o Flechas para mover<br>Grúa: doble click vende<br>Click der.=pausar belardi<br>Comandos: /regra, /delegado, /bolsube, /bolsaja</div>
+      </div>
+    </div>
+  </div>
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+const woodCountEl = document.getElementById('woodCount');
+const stoneCountEl = document.getElementById('stoneCount');
+const goldCountEl = document.getElementById('goldCount');
+const dollarCountEl = document.getElementById('dollarCount');
+const rebirthCountEl = document.getElementById('rebirthCount');
+const cmdInput = document.getElementById('cmdInput');
+const focusToggleBtn = document.getElementById('focusToggleBtn');
+const stockChart = document.getElementById('stockChart');
+const stockCtx = stockChart.getContext('2d');
+
+let wood=0, stone=0, gold=0, dollars=0, rebirths=0;
+let grassHue = 100;
+let bulldozers=[], resources=[], houses=[], particles=[];
+let rebirthRequirement = 5, sizeBonus = 1;
+let bulldozerCost = {wood:10, stone:5, gold:5};
+let bulldozerRedCost = {wood:30, stone:15, gold:15};
+let bulldozerGrayCost = {wood:120, stone:60, gold:60};
+let bulldozerBelardiCost = {wood:120, stone:60, gold:60};
+const costMult = 1.33, MAX_RESOURCES = 30;
+let houseCost = {wood:50, stone:30, gold:40};
+let houseUpgradeCost = {wood:30, stone:20, gold:25};
+let craneMode = false, selectedBulldozer = null, selectedHouse = null;
+let exchangeRate = 1, stockHistory = [];
+let resourceRainTimer = 0, houseTimer = 0;
+let houseMode = false, houseUseGold = false;
+let keepFocusOnCommand = false;
+
+// Carga de imágenes (código omitido por brevedad, se mantiene igual)
+const images = {};
+const imageSources = {
+    wood: 'wood.png',
+    stone: 'stone.png',
+    gold: 'gold.png',
+    crane: 'crane.png',
+    bulldozer: 'bulldozer.png',
+    bulldozer_red: 'bulldozer_red.png',
+    bulldozer_gray: 'bulldozer_gray.png',
+    belardi: 'belardi.png',
+    house: 'house.png'
+};
+
+function loadImages() {
+    let loadedImages = 0;
+    const totalImages = Object.keys(imageSources).length;
+    return new Promise(resolve => {
+        for (let key in imageSources) {
+            images[key] = new Image();
+            images[key].onload = () => {
+                loadedImages++;
+                if (loadedImages >= totalImages) {
+                    resolve();
+                }
+            };
+            images[key].onerror = () => {
+                console.error(`Error loading image: ${imageSources[key]}. Please ensure the images are in the same directory.`);
+                loadedImages++;
+                if (loadedImages >= totalImages) {
+                    resolve();
+                }
+            };
+            images[key].src = imageSources[key];
+        }
+    });
+}
+
+// Control con WASD y Flechas (código omitido por brevedad, se mantiene igual)
+const keys={w:false,a:false,s:false,d:false,up:false,down:false,left:false,right:false};
+window.addEventListener('keydown',e=>{
+  const k = e.key.toLowerCase();
+  if(k==='w') keys.w=true;
+  if(k==='a') keys.a=true;
+  if(k==='s') keys.s=true;
+  if(k==='d') keys.d=true;
+  if(e.key==='ArrowUp'){ keys.up=true; e.preventDefault(); }
+  if(e.key==='ArrowDown'){ keys.down=true; e.preventDefault(); }
+  if(e.key==='ArrowLeft'){ keys.left=true; e.preventDefault(); }
+  if(e.key==='ArrowRight'){ keys.right=true; e.preventDefault(); }
+  if(!cmdInput.matches(':focus') && (k==='w'||k==='s')){ e.preventDefault(); }
+});
+window.addEventListener('keyup',e=>{
+  const k = e.key.toLowerCase();
+  if(k==='w') keys.w=false;
+  if(k==='a') keys.a=false;
+  if(k==='s') keys.s=false;
+  if(k==='d') keys.d=false;
+  if(e.key==='ArrowUp') keys.up=false;
+  if(e.key==='ArrowDown') keys.down=false;
+  if(e.key==='ArrowLeft') keys.left=false;
+  if(e.key==='ArrowRight') keys.right=false;
+});
+
+function rand(a,b){return Math.random()*(b-a)+a;}
+
+function getBaseSpeed(type) {
+    if (type === 'red') return 2.25;
+    if (type === 'gray') return 3.75;
+    return 1.5;
+}
+
+function spawnResource(count=1){
+  for(let i=0;i<count;i++){
+    if(resources.length>=MAX_RESOURCES) break;
+    let goldChance = 0.1;
+    for(const h of houses) goldChance += 0.01 + 0.01*(h.level-1);
+    goldChance = Math.min(goldChance, 0.9);
+    const roll = Math.random();
+    const type = roll < goldChance ? 'gold' : roll < (goldChance + (1-goldChance)*0.5) ? 'wood' : 'stone';
+    let x, y, attempts = 0;
+    do { x=rand(24,W-24); y=rand(24,H-24); attempts++; } while(isInsideHouse(x,y) && attempts<50);
+    if(attempts<50) resources.push({x,y,type});
+  }
+}
+
+function isInsideHouse(x,y){
+  for(const h of houses){
+    const size = 50*h.level;
+    if(x>h.x-size/2 && x<h.x+size/2 && y>h.y-size/2 && y<h.y+size/2) return true;
+  }
+  return false;
+}
+
+function canPlaceHouse(x,y,level=1){
+  const size = 50*level;
+  for(const h of houses){
+    const hSize = 50*h.level;
+    if(Math.abs(x-h.x)<(size+hSize)/2.5 && Math.abs(y-h.y)<(size+hSize)/2.5) return false;
+  }
+  return true;
+}
+
+function findValidBelardiPos(){
+  let attempts = 0;
+  while(attempts < 100){
+    const x = rand(40, W-40);
+    const y = rand(40, H-40);
+    let valid = true;
+    for(const b of bulldozers){
+      if(Math.hypot(b.x-x, b.y-y) < b.radius*2 + 20){
+        valid = false; break;
+      }
+    }
+    if(valid && !isInsideHouse(x,y)) return {x,y};
+    attempts++;
+  }
+  return {x: rand(40,W-40), y: rand(40,H-40)};
+}
+
+function createBulldozer(x,y,type='normal'){
+  const angle = Math.random()*Math.PI*2;
+  const mult = type==='red'?4:type==='gray'?10:1;
+  const speed = getBaseSpeed(type); // Usar getBaseSpeed
+  const auto = type==='belardi';
+  bulldozers.push({x:x??W/2, y:y??H/2, speed, radius:20*sizeBonus, angle, type, multiplier:mult, auto, paused:false, targetResource:null});
+}
+
+function createParticle(x,y,text,color){
+  particles.push({x,y,text,color,life:60,vy:-1});
+}
+
+function generateExchangeRate(){
+  exchangeRate = Math.round(rand(0.5,3)*100)/100;
+  stockHistory = [];
+  for(let i=0;i<20;i++) stockHistory.push(Math.max(0.5, exchangeRate + rand(-0.3,0.3)));
+  updateStockChart();
+  document.getElementById('exchangeRate').textContent = `1 oro = ${exchangeRate.toFixed(2)} $`;
+}
+
+function updateStockChart(){
+  stockCtx.fillStyle='#1a1a1a'; stockCtx.fillRect(0,0,240,120);
+  if(!stockHistory.length) return;
+  const max=Math.max(...stockHistory), min=Math.min(...stockHistory), range=max-min||1;
+  stockCtx.strokeStyle='#d4af37'; stockCtx.lineWidth=2; stockCtx.beginPath();
+  for(let i=0;i<stockHistory.length;i++){
+    const x=(i/(stockHistory.length-1))*240, y=120-((stockHistory[i]-min)/range)*100-10;
+    i===0?stockCtx.moveTo(x,y):stockCtx.lineTo(x,y);
+  }
+  stockCtx.stroke();
+  stockCtx.fillStyle='#888'; stockCtx.font='10px system-ui';
+  stockCtx.fillText(`Max: ${max.toFixed(2)}`,5,15);
+  stockCtx.fillText(`Min: ${min.toFixed(2)}`,5,115);
+}
+
+function updateCostLabel(){
+  document.getElementById('normalWoodCost').textContent = `${Math.round(bulldozerCost.wood)}M ${Math.round(bulldozerCost.stone)}P`;
+  document.getElementById('normalGoldCost').textContent = `${Math.round(bulldozerCost.gold)} Oro`;
+  document.getElementById('redWoodCost').textContent = `${Math.round(bulldozerRedCost.wood)}M ${Math.round(bulldozerRedCost.stone)}P`;
+  document.getElementById('redGoldCost').textContent = `${Math.round(bulldozerRedCost.gold)} Oro`;
+  document.getElementById('grayWoodCost').textContent = `${Math.round(bulldozerGrayCost.wood)}M ${Math.round(bulldozerGrayCost.stone)}P`;
+  document.getElementById('grayGoldCost').textContent = `${Math.round(bulldozerGrayCost.gold)} Oro`;
+  document.getElementById('belardiWoodCost').textContent = `${Math.round(bulldozerBelardiCost.wood)}M ${Math.round(bulldozerBelardiCost.stone)}P`;
+  document.getElementById('belardiGoldCost').textContent = `${Math.round(bulldozerBelardiCost.gold)} Oro`;
+  document.getElementById('houseWoodCost').textContent = `${Math.round(houseCost.wood)}M ${Math.round(houseCost.stone)}P`;
+  document.getElementById('houseGoldCost').textContent = `${Math.round(houseCost.gold)} Oro`;
+  document.getElementById('upgradeWoodCost').textContent = `${Math.round(houseUpgradeCost.wood)}M ${Math.round(houseUpgradeCost.stone)}P`;
+  document.getElementById('upgradeGoldCost').textContent = `${Math.round(houseUpgradeCost.gold)} Oro`;
+}
+
+function updateRebirthButton(){
+  document.getElementById('rebirthBtn').textContent = `Renacer (necesitas ${rebirthRequirement} bulldozers)`;
+}
+
+function buyBulldozer(type='normal', useGold=false){
+  let cost = type==='red'?bulldozerRedCost:type==='gray'?bulldozerGrayCost:type==='belardi'?bulldozerBelardiCost:bulldozerCost;
+  if(useGold){ if(gold<Math.round(cost.gold)) return; gold-=Math.round(cost.gold); }
+  else { if(wood<Math.round(cost.wood)||stone<Math.round(cost.stone)) return; wood-=Math.round(cost.wood); stone-=Math.round(cost.stone); }
+  if(type==='red'){ bulldozerRedCost.wood*=costMult; bulldozerRedCost.stone*=costMult; bulldozerRedCost.gold*=costMult; }
+  else if(type==='gray'){ bulldozerGrayCost.wood*=costMult; bulldozerGrayCost.stone*=costMult; bulldozerGrayCost.gold*=costMult; }
+  else if(type==='belardi'){ bulldozerBelardiCost.wood*=costMult; bulldozerBelardiCost.stone*=costMult; bulldozerBelardiCost.gold*=costMult; }
+  else { bulldozerCost.wood*=costMult; bulldozerCost.stone*=costMult; bulldozerCost.gold*=costMult; }
+  if(type==='belardi'){ const p=findValidBelardiPos(); createBulldozer(p.x,p.y,type); }
+  else createBulldozer(W/2,H/2,type);
+  updateCostLabel();
+  createParticle(W/2,H/2,'¡Nuevo bulldozer!','#00FF00');
+}
+
+function rebirth(){
+  if(bulldozers.length<rebirthRequirement) return;
+  wood=0; stone=0; resources=[];
+  
+  const yb = bulldozers.find(b=>b.type==='normal');
+  
+  bulldozers = [];
+  
+  if(yb) {
+    const baseSpeed = getBaseSpeed(yb.type);
+    bulldozers.push({...yb, x:W/2, y:H/2, targetResource:null, speed: baseSpeed});
+  } else {
+    createBulldozer(W/2,H/2,'normal');
+  }
+  
+  rebirths++; rebirthRequirement++; grassHue=(grassHue+60)%360;
+  bulldozerCost={wood:10,stone:5,gold:5}; bulldozerRedCost={wood:30,stone:15,gold:15};
+  bulldozerGrayCost={wood:120,stone:60,gold:60}; bulldozerBelardiCost={wood:120,stone:60,gold:60};
+  sizeBonus*=1.1;
+  for(const h of houses) h.level=1;
+  generateExchangeRate(); spawnResource(12); updateCostLabel(); updateRebirthButton();
+  createParticle(W/2,H/2,'¡RENACIMIENTO!','#FF00FF');
+}
+
+// --- NUEVA FUNCIÓN DE INICIO DE PARTIDA ---
+function initializeNewGame() {
+    // Reset core variables to initial state
+    wood=0; stone=0; gold=0; dollars=0; rebirths=0;
+    grassHue = 100;
+    rebirthRequirement = 5; sizeBonus = 1;
+    bulldozerCost = {wood:10, stone:5, gold:5};
+    bulldozerRedCost = {wood:30, stone:15, gold:15};
+    bulldozerGrayCost = {wood:120, stone:60, gold:60};
+    bulldozerBelardiCost = {wood:120, stone:60, gold:60};
+    houseCost = {wood:50, stone:30, gold:40};
+    houseUpgradeCost = {wood:30, stone:20, gold:25};
+    
+    // Clear dynamic arrays
+    bulldozers=[]; resources=[]; houses=[]; particles=[];
+    
+    // Set initial game elements
+    createBulldozer(W/2,H/2,'normal'); 
+    spawnResource(15); 
+    generateExchangeRate();
+    
+    // Update UI
+    updateCostLabel(); 
+    updateRebirthButton(); 
+    
+    createParticle(W/2, H/2, '¡Partida Nueva!', '#00FFFF');
+}
+// ------------------------------------------
+
+function getGameState(){
+    return {
+        wood, stone, gold, dollars, rebirths, grassHue, rebirthRequirement, sizeBonus,
+        bulldozerCost, bulldozerRedCost, bulldozerGrayCost, bulldozerBelardiCost,
+        houseCost, houseUpgradeCost, exchangeRate, stockHistory, bulldozers, resources, houses
+    };
+}
+
+function setGameState(state){
+    wood = state.wood; stone = state.stone; gold = state.gold; dollars = state.dollars; rebirths = state.rebirths;
+    grassHue = state.grassHue; rebirthRequirement = state.rebirthRequirement; sizeBonus = state.sizeBonus;
+    bulldozerCost = state.bulldozerCost; bulldozerRedCost = state.bulldozerRedCost;
+    bulldozerGrayCost = state.bulldozerGrayCost; bulldozerBelardiCost = state.bulldozerBelardiCost;
+    houseCost = state.houseCost; houseUpgradeCost = state.houseUpgradeCost;
+    exchangeRate = state.exchangeRate; stockHistory = state.stockHistory;
+    
+    // Restaurar arrays y objetos complejos
+    bulldozers = state.bulldozers.map(b => ({...b, targetResource: null}));
+    resources = state.resources;
+    houses = state.houses;
+    
+    updateCostLabel();
+    updateRebirthButton();
+    updateStockChart();
+    document.getElementById('exchangeRate').textContent = `1 oro = ${exchangeRate.toFixed(2)} $`;
+    createParticle(W/2, H/2, '¡PARTIDA CARGADA!', '#00FF00');
+}
+
+function saveGame(slot){
+    try {
+        const state = getGameState();
+        localStorage.setItem(`gameSave${slot}`, JSON.stringify(state));
+        updateSaveSlotLabels();
+        createParticle(W/2, H/2, `Guardado en Ranura ${slot}`, '#FFD700');
+    } catch(e) {
+        console.error("Error al guardar la partida:", e);
+        createParticle(W/2, H/2, 'Error al Guardar', '#FF0000');
+    }
+}
+
+// --- FUNCIÓN LOADGAME MODIFICADA CON PARÁMETRO SILENT ---
+function loadGame(slot, silent = false){
+    try {
+        const savedData = localStorage.getItem(`gameSave${slot}`);
+        if(savedData){
+            const state = JSON.parse(savedData);
+            setGameState(state);
+            updateSaveSlotLabels();
+            return true;
+        } else {
+            if (!silent) {
+                createParticle(W/2, H/2, 'Ranura Vacía', '#FF0000');
+            }
+            return false;
+        }
+    } catch(e) {
+        console.error("Error al cargar la partida:", e);
+        if (!silent) {
+            createParticle(W/2, H/2, 'Error al Cargar', '#FF0000');
+        }
+        return false;
+    }
+}
+// --------------------------------------------------------
+
+function deleteGame(slot) {
+    if (localStorage.getItem(`gameSave${slot}`)) {
+        localStorage.removeItem(`gameSave${slot}`);
+        updateSaveSlotLabels();
+        createParticle(W/2, H/2, `Ranura ${slot} Borrada`, '#FF0000');
+    } else {
+        createParticle(W/2, H/2, 'Ranura ya Vacía', '#FF8800');
+    }
+}
+
+function updateSaveSlotLabels(){
+    for(let i=1; i<=5; i++){
+        const saveBtn = document.getElementById(`save${i}Btn`);
+        const loadBtn = document.getElementById(`load${i}Btn`);
+        const isSaved = localStorage.getItem(`gameSave${i}`);
+
+        const text = `Ranura ${i}: ${isSaved ? 'Partida Guardada' : 'Vacía'}`;
+        const className = isSaved ? 'saveSlot saved' : 'saveSlot empty';
+
+        if(saveBtn) { saveBtn.textContent = text; saveBtn.className = className; }
+        if(loadBtn) { loadBtn.textContent = text; loadBtn.className = className; }
+    }
+}
+
+
+// Event listeners (código omitido por brevedad, se mantiene igual)
+document.getElementById('buyBtn').onclick=()=>buyBulldozer('normal',false);
+document.getElementById('buyBtnGold').onclick=()=>buyBulldozer('normal',true);
+document.getElementById('buyRedBtn').onclick=()=>buyBulldozer('red',false);
+document.getElementById('buyRedBtnGold').onclick=()=>buyBulldozer('red',true);
+document.getElementById('buyGrayBtn').onclick=()=>buyBulldozer('gray',false);
+document.getElementById('buyGrayBtnGold').onclick=()=>buyBulldozer('gray',true);
+document.getElementById('buyBelardiBtn').onclick=()=>buyBulldozer('belardi',false);
+document.getElementById('buyBelardiBtnGold').onclick=()=>buyBulldozer('belardi',true);
+document.getElementById('rebirthBtn').onclick=rebirth;
+
+document.getElementById('craneBtn').onclick=()=>{
+  craneMode=!craneMode; if(!craneMode){selectedBulldozer=null;selectedHouse=null;}
+  document.getElementById('craneBtn').style.opacity=craneMode?'0.5':'1';
+  canvas.style.cursor=craneMode?'url("crane.png"), auto':'default';
+};
+
+document.getElementById('buyHouseBtn').onclick=()=>{ if(wood>=houseCost.wood&&stone>=houseCost.stone){houseMode=true;houseUseGold=false;canvas.style.cursor='crosshair';} };
+document.getElementById('buyHouseBtnGold').onclick=()=>{ if(gold>=houseCost.gold){houseMode=true;houseUseGold=true;canvas.style.cursor='crosshair';} };
+
+document.getElementById('upgradeHouseBtn').onclick=()=>{
+  if(selectedHouse&&wood>=houseUpgradeCost.wood&&stone>=houseUpgradeCost.stone){
+    wood-=houseUpgradeCost.wood; stone-=houseUpgradeCost.stone; selectedHouse.level++;
+    houseUpgradeCost.wood=Math.round(houseUpgradeCost.wood*1.5); houseUpgradeCost.stone=Math.round(houseUpgradeCost.stone*1.5);
+    houseUpgradeCost.gold=Math.round(houseUpgradeCost.gold*1.5); updateCostLabel(); selectedHouse=null;
+  }
+};
+document.getElementById('upgradeHouseBtnGold').onclick=()=>{
+  if(selectedHouse&&gold>=houseUpgradeCost.gold){
+    gold-=houseUpgradeCost.gold; selectedHouse.level++;
+    houseUpgradeCost.wood=Math.round(houseUpgradeCost.wood*1.5); houseUpgradeCost.stone=Math.round(houseUpgradeCost.stone*1.5);
+    houseUpgradeCost.gold=Math.round(houseUpgradeCost.gold*1.5); updateCostLabel(); selectedHouse=null;
+  }
+};
+
+document.getElementById('stockToggle').onclick=()=>{ document.getElementById('stockPanel').style.display=document.getElementById('stockPanel').style.display==='none'?'block':'none'; };
+document.getElementById('saveToggle').onclick=()=>{ document.getElementById('savePanel').style.display=document.getElementById('savePanel').style.display==='none'?'block':'none'; };
+document.getElementById('loadToggle').onclick=()=>{ document.getElementById('loadPanel').style.display=document.getElementById('loadPanel').style.display==='none'?'block':'none'; };
+
+// Nuevo listener para el botón de enfoque
+focusToggleBtn.onclick = () => {
+    keepFocusOnCommand = !keepFocusOnCommand;
+    focusToggleBtn.style.opacity = keepFocusOnCommand ? '1' : '0.5';
+    focusToggleBtn.style.background = keepFocusOnCommand ? '#00FF00' : '#4a4a4a';
+    cmdInput.focus();
+};
+
+// Listeners para Guardar y Cargar (5 ranuras) MODIFICADOS para Shift+Click
+for(let i=1; i<=5; i++){
+    const slot = i;
+    const saveBtn = document.getElementById(`save${slot}Btn`);
+    const loadBtn = document.getElementById(`load${slot}Btn`);
+
+    const clickHandler = (e, action) => {
+        if (e.shiftKey) {
+            e.preventDefault(); 
+            // Confirmación para borrar
+            if (confirm(`¿Estás seguro de que quieres borrar la partida en la Ranura ${slot}?`)) {
+                deleteGame(slot);
+            }
+        } else {
+            // Acción normal (Guardar o Cargar)
+            if (action === 'save') {
+                saveGame(slot);
+            } else if (action === 'load') {
+                const isSaved = localStorage.getItem(`gameSave${slot}`);
+                
+                if (isSaved) {
+                    loadGame(slot); // Carga normal si hay partida
+                } else {
+                    // Ranura vacía: Advertencia y opción de iniciar partida nueva
+                    if (confirm(`La Ranura ${slot} está vacía. ¿Quieres empezar una partida nueva? (La partida actual no se guardará automáticamente)`)) {
+                        initializeNewGame(); // Inicia una partida nueva
+                    } else {
+                        createParticle(W/2, H/2, 'Carga Cancelada', '#FFFF00');
+                    }
+                }
+            }
+        }
+    };
+    
+    // Asignar el nuevo manejador de eventos a ambos botones
+    saveBtn.addEventListener('click', (e) => clickHandler(e, 'save'));
+    loadBtn.addEventListener('click', (e) => clickHandler(e, 'load'));
+}
+
+document.getElementById('exchangeBtn').onclick=()=>{
+  const amt=parseInt(document.getElementById('goldToExchange').value)||0;
+  if(amt>0&&gold>=amt){ gold-=amt; dollars+=Math.floor(amt*exchangeRate); document.getElementById('goldToExchange').value=''; createParticle(W/2,H/2,`+${Math.floor(amt*exchangeRate)}$`,'#00FF00'); }
+};
+document.getElementById('exchangeBackBtn').onclick=()=>{
+  const amt=parseInt(document.getElementById('dollarsToExchange').value)||0;
+  if(amt>0&&dollars>=amt){ const ga=Math.floor(amt/exchangeRate); if(ga>0){ dollars-=amt; gold+=ga; document.getElementById('dollarsToExchange').value=''; createParticle(W/2,H/2,`+${ga} oro`,'#FFD700'); } }
+};
+
+// Comandos
+cmdInput.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){
+    const cmd = cmdInput.value.trim().toLowerCase();
+    
+    // Comandos existentes
+    if(cmd==='/cedes'){ wood+=1000; stone+=1000; for(let i=0;i<100;i++){ const p=findValidBelardiPos(); createBulldozer(p.x,p.y,['normal','red','gray'][Math.floor(Math.random()*3)]); } }
+    if(cmd==='/ceci'){ for(let i=0;i<20;i++){ const p=findValidBelardiPos(); createBulldozer(p.x,p.y,'belardi'); } createParticle(W/2,H/2,'¡20 Belardis!','#FFD700'); }
+    if(cmd==='/belarstop'){ for(const b of bulldozers) if(b.type==='belardi') b.paused=true; createParticle(W/2,H/2,'Belardis pausados','#FF0000'); }
+    if(cmd==='/destop'){ for(const b of bulldozers) if(b.type==='belardi') b.paused=false; createParticle(W/2,H/2,'Belardis activos','#00FF00'); }
+    if(cmd==='/golden'){ gold+=5000; createParticle(W/2,H/2,'+5000 ORO!','#FFD700'); }
+    if(cmd==='/peppapig'){ wood+=400; stone+=400; createParticle(W/2,H/2,'+400M +400P!','#FFC0CB'); }
+    if(cmd==='/turbo'){ for(const b of bulldozers) b.speed*=2; }
+
+    // --- COMANDOS NUEVOS ---
+
+    // /regra - Renacer sin perder nada
+    if(cmd==='/regra'){
+      for(const b of bulldozers) {
+        b.speed = getBaseSpeed(b.type);
+      }
+
+      rebirths++; rebirthRequirement++; grassHue=(grassHue+60)%360;
+      sizeBonus*=1.1;
+      for(const h of houses) h.level=1;
+      generateExchangeRate(); spawnResource(12); updateCostLabel(); updateRebirthButton();
+      createParticle(W/2,H/2,'¡REGLA! (Renacer sin pérdida)','#00FFFF');
+    }
+
+    // /delegado - Aumentar el tamaño del bulldozer de mayor rango
+    if(cmd==='/delegado'){
+      const order = ['normal', 'red', 'gray', 'belardi'];
+      let targetBulldozer = null;
+      let highestRank = -1;
+
+      for(const b of bulldozers){
+        const currentRank = order.indexOf(b.type);
+        if(currentRank > highestRank){
+          highestRank = currentRank;
+          targetBulldozer = b;
+        } else if(currentRank === highestRank && highestRank > -1 && Math.random() < 0.5){
+          targetBulldozer = b;
+        }
+      }
+
+      if(targetBulldozer){
+        targetBulldozer.radius *= 1.25;
+        createParticle(targetBulldozer.x, targetBulldozer.y, '¡DELEGADO! (+25% Radio)', '#ADFF2F');
+      } else {
+         createParticle(W/2, H/2, 'No hay bulldozers', '#FF0000');
+      }
+    }
+
+    // /bolsube - Bolsa sube a 1 oro = 5$
+    if(cmd==='/bolsube'){
+        exchangeRate = 5.00;
+        stockHistory = [];
+        for(let i=0;i<20;i++) stockHistory.push(exchangeRate + rand(-0.3, 0.3));
+        updateStockChart();
+        document.getElementById('exchangeRate').textContent = `1 oro = ${exchangeRate.toFixed(2)} $`;
+        createParticle(W/2,H/2,'¡BOLSA SUBE! (5.00$)', '#00FF00');
+    }
+
+    // /bolsaja - Bolsa baja a 1 oro = 0.1$
+    if(cmd==='/bolsaja'){
+        exchangeRate = 0.10;
+        stockHistory = [];
+        for(let i=0;i<20;i++) stockHistory.push(exchangeRate + rand(-0.01, 0.01));
+        updateStockChart();
+        document.getElementById('exchangeRate').textContent = `1 oro = ${exchangeRate.toFixed(2)} $`;
+        createParticle(W/2,H/2,'¡BOLSA BAJA! (0.10$)', '#FF0000');
+    }
+
+    // Lógica del Foco
+    cmdInput.value='';
+    if(keepFocusOnCommand){
+        cmdInput.focus();
+    } else {
+        cmdInput.blur();
+    }
+  }
+});
+
+// Click derecho para pausar belardi (código omitido por brevedad, se mantiene igual)
+canvas.addEventListener('contextmenu',e=>{
+  e.preventDefault();
+  if(!craneMode) return;
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  for(const b of bulldozers){
+    if(b.type==='belardi' && Math.hypot(b.x-mx,b.y-my)<b.radius){
+      b.paused = !b.paused;
+      createParticle(b.x,b.y-20,b.paused?'PAUSADO':'ACTIVO',b.paused?'#FF0000':'#00FF00');
+      return;
+    }
+  }
+});
+
+let lastClickTime=0;
+canvas.addEventListener('click',e=>{
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  const now=Date.now(), isDouble=now-lastClickTime<300;
+  lastClickTime=now;
+  
+  if(houseMode){
+    if(canPlaceHouse(mx,my)){
+      const cost = houseUseGold ? {wood:0, stone:0, gold:houseCost.gold} : {wood:houseCost.wood, stone:houseCost.stone, gold:0};
+      if(houseUseGold){ gold-=cost.gold; }
+      else { wood-=cost.wood; stone-=cost.stone; }
+      houses.push({x:mx,y:my,level:1,totalCost:cost});
+      houseMode=false; canvas.style.cursor='default'; createParticle(mx,my,'¡Casa!','#00FF00');
+    }
+  } else if(craneMode){
+    if(selectedBulldozer||selectedHouse){ selectedBulldozer=null; selectedHouse=null; return; }
+    if(isDouble){
+      for(let i=houses.length-1;i>=0;i--){
+        const h=houses[i], size=50*h.level;
+        if(mx>h.x-size/2&&mx<h.x+size/2&&my>h.y-size/2&&my<h.y+size/2){
+          wood+=Math.floor((h.totalCost.wood||0)*0.85); stone+=Math.floor((h.totalCost.stone||0)*0.85); gold+=Math.floor((h.totalCost.gold||0)*0.85);
+          houses.splice(i,1); selectedHouse=null; createParticle(mx,my,'¡Vendida!','#FFD700'); return;
+        }
+      }
+      for(let i=bulldozers.length-1;i>=0;i--){
+        const b=bulldozers[i];
+        if(Math.hypot(b.x-mx,b.y-my)<b.radius){
+          let currentCost = b.type==='red'?bulldozerRedCost:b.type==='gray'?bulldozerGrayCost:b.type==='belardi'?bulldozerBelardiCost:bulldozerCost;
+          wood+=Math.floor(currentCost.wood/(costMult*0.85)); stone+=Math.floor(currentCost.stone/(costMult*0.85)); gold+=Math.floor(currentCost.gold/(costMult*0.85));
+          bulldozers.splice(i,1); selectedBulldozer=null; createParticle(mx,my,'¡Vendido!','#FFD700'); return;
+        }
+      }
+    }
+    for(const b of bulldozers){ if(Math.hypot(b.x-mx,b.y-my)<b.radius){ selectedBulldozer=b; return; } }
+    for(const h of houses){ const size=50*h.level; if(mx>h.x-size/2&&mx<h.x+size/2&&my>h.y-size/2&&my<h.y+size/2){ selectedHouse=h; return; } }
+  }
+});
+
+canvas.addEventListener('mousemove',e=>{
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  if(craneMode&&selectedBulldozer){ selectedBulldozer.x=mx; selectedBulldozer.y=my; }
+  if(craneMode&&selectedHouse){ selectedHouse.x=mx; selectedHouse.y=my; }
+});
+
+// Funciones de actualización y dibujo (código omitido por brevedad, se mantiene igual)
+function update(dt){
+  resourceRainTimer+=dt;
+  if(resourceRainTimer>=60000){ resourceRainTimer=0; if(Math.random()<0.3){ createParticle(W/2,30,'¡LLUVIA!','#FFD700'); for(let i=0;i<15;i++) setTimeout(()=>spawnResource(1),i*100); } }
+  houseTimer+=dt;
+  if(houseTimer>=5000){ wood+=houses.length; stone+=houses.length; houseTimer=0;}
+  
+  for(let i=particles.length-1;i>=0;i--){ particles[i].y+=particles[i].vy; particles[i].life--; if(particles[i].life<=0) particles.splice(i,1); }
+  
+  for(const b of bulldozers){
+    if(b.auto && !b.paused && (!selectedBulldozer||selectedBulldozer!==b)){
+      if(!b.targetResource||!resources.find(r=>r===b.targetResource)){
+        let closest=null, minD=Infinity;
+        for(const r of resources){ const d=Math.hypot(b.x-r.x,b.y-r.y); if(d<minD){minD=d;closest=r;} }
+        b.targetResource=closest;
+      }
+      if(b.targetResource){
+        const dx=b.targetResource.x-b.x, dy=b.targetResource.y-b.y, dist=Math.hypot(dx,dy);
+        if(dist>5){
+          let nx=dx/dist, ny=dy/dist;
+          let newX=b.x+nx*b.speed*dt*0.06, newY=b.y+ny*b.speed*dt*0.06;
+          let canMove=true;
+          for(const other of bulldozers){
+            if(other!==b && Math.hypot(newX-other.x,newY-other.y)<b.radius+other.radius){ canMove=false; break; }
+          }
+          for(const h of houses){ const size=50*h.level; if(newX>h.x-size/2&&newX<h.x+size/2&&newY>h.y-size/2&&newY<h.y+size/2){ canMove=false; break; } }
+          if(canMove){ b.x=newX; b.y=newY; b.angle=Math.atan2(dy,dx); }
+        }
+      }
+    } else if(!craneMode||selectedBulldozer!==b){
+      let mx=0,my=0;
+      if(keys.w||keys.up) my-=1;
+      if(keys.s||keys.down) my+=1;
+      if(keys.a||keys.left) mx-=1;
+      if(keys.d||keys.right) mx+=1;
+      if(mx!==0||my!==0){
+        const n=Math.hypot(mx,my);
+        let newX=b.x+mx/n*b.speed*dt*0.06, newY=b.y+my/n*b.speed*dt*0.06;
+        let canMove=true;
+        for(const h of houses){ const size=50*h.level; if(newX>h.x-size/2&&newX<h.x+size/2&&newY>h.y-size/2&&newY<h.y+size/2){ canMove=false; break; } }
+        if(canMove){ b.x=newX; b.y=newY; b.angle=Math.atan2(my,mx); }
+      }
+    }
+    b.x=Math.max(20,Math.min(W-20,b.x)); b.y=Math.max(20,Math.min(H-20,b.y));
+  }
+
+  for(let i=resources.length-1;i>=0;i--){
+    const r=resources[i];
+    for(const b of bulldozers){
+      if(selectedBulldozer===b&&craneMode) continue;
+      if(Math.hypot(b.x-r.x,r.y-b.y)<b.radius+10){
+        const m=b.multiplier||1;
+        if(r.type==='wood'){ wood+=m; createParticle(r.x,r.y,`+${m}`,'#8B4513'); }
+        else if(r.type==='stone'){ stone+=m; createParticle(r.x,r.y,`+${m}`,'#888'); }
+        else { gold+=m; createParticle(r.x,r.y,`+${m}`,'#FFD700'); }
+        resources.splice(i,1); spawnResource(1);
+        if(b.targetResource===r) b.targetResource=null;
+        break;
+      }
+    }
+  }
+
+  wood=Math.max(0,Math.floor(wood)); stone=Math.max(0,Math.floor(stone)); gold=Math.max(0,Math.floor(gold)); dollars=Math.max(0,Math.floor(dollars));
+  woodCountEl.textContent=wood; stoneCountEl.textContent=stone; goldCountEl.textContent=gold; dollarCountEl.textContent=dollars; rebirthCountEl.textContent=rebirths;
+  
+  document.getElementById('buyBtn').disabled=!(wood>=Math.round(bulldozerCost.wood)&&stone>=Math.round(bulldozerCost.stone));
+  document.getElementById('buyBtnGold').disabled=!(gold>=Math.round(bulldozerCost.gold));
+  document.getElementById('buyRedBtn').disabled=!(wood>=Math.round(bulldozerRedCost.wood)&&stone>=Math.round(bulldozerRedCost.stone));
+  document.getElementById('buyRedBtnGold').disabled=!(gold>=Math.round(bulldozerRedCost.gold));
+  document.getElementById('buyGrayBtn').disabled=!(wood>=Math.round(bulldozerGrayCost.wood)&&stone>=Math.round(bulldozerGrayCost.stone));
+  document.getElementById('buyGrayBtnGold').disabled=!(gold>=Math.round(bulldozerGrayCost.gold));
+  document.getElementById('buyBelardiBtn').disabled=!(wood>=Math.round(bulldozerBelardiCost.wood)&&stone>=Math.round(bulldozerBelardiCost.stone));
+  document.getElementById('buyBelardiBtnGold').disabled=!(gold>=Math.round(bulldozerBelardiCost.gold));
+  document.getElementById('buyHouseBtn').disabled=!(wood>=houseCost.wood&&stone>=houseCost.stone);
+  document.getElementById('buyHouseBtnGold').disabled=!(gold>=houseCost.gold);
+  document.getElementById('upgradeHouseBtn').disabled=!selectedHouse||!(wood>=houseUpgradeCost.wood&&stone>=houseUpgradeCost.stone);
+  document.getElementById('upgradeHouseBtnGold').disabled=!selectedHouse||!(gold>=houseUpgradeCost.gold);
+  document.getElementById('rebirthBtn').disabled=bulldozers.length<rebirthRequirement;
+}
+
+function draw(){
+  ctx.fillStyle=`hsl(${grassHue},40%,35%)`; ctx.fillRect(0,0,W,H);
+  
+  function getProportionalSize(img, targetSize) {
+      if (!img || !img.complete) return { drawWidth: 0, drawHeight: 0, x_offset: 0, y_offset: 0 };
+      
+      const ar = img.width / img.height;
+      let drawWidth, drawHeight;
+      
+      if (img.width > img.height) {
+          drawWidth = targetSize;
+          drawHeight = targetSize / ar;
+      } else {
+          drawHeight = targetSize;
+          drawWidth = targetSize * ar;
+      }
+      
+      const x_offset = (targetSize - drawWidth) / 2;
+      const y_offset = (targetSize - drawHeight) / 2;
+      
+      return { drawWidth, drawHeight, x_offset, y_offset };
+  }
+
+  // Dibujar Casas (Houses)
+  for(const h of houses){
+    const size = 50 * h.level;
+    const img = images.house;
+    const { drawWidth, drawHeight, x_offset, y_offset } = getProportionalSize(img, size);
+
+    if (img && img.complete) {
+      ctx.drawImage(img, h.x - size / 2 + x_offset, h.y - size / 2 + y_offset, drawWidth, drawHeight);
+    } else {
+      ctx.fillStyle='#8B4513'; ctx.fillRect(h.x-size/2,h.y-size/2,size,size);
+    }
+    if(selectedHouse===h){ ctx.strokeStyle='#FFD700'; ctx.lineWidth=3; ctx.strokeRect(h.x-size/2,h.y-size/2,size,size); }
+  }
+
+  // Dibujar Recursos (Resources)
+  const RESOURCE_SIZE = 24;
+  for(const r of resources){
+    let imgKey;
+    if(r.type==='wood') imgKey = 'wood';
+    else if(r.type==='stone') imgKey = 'stone';
+    else imgKey = 'gold';
+
+    const img = images[imgKey];
+    const { drawWidth, drawHeight, x_offset, y_offset } = getProportionalSize(img, RESOURCE_SIZE);
+
+    if (img && img.complete) {
+        ctx.drawImage(img, r.x - RESOURCE_SIZE / 2 + x_offset, r.y - RESOURCE_SIZE / 2 + y_offset, drawWidth, drawHeight);
+    } else {
+        ctx.beginPath(); ctx.arc(r.x,r.y,12,0,Math.PI*2);
+        ctx.fillStyle=r.type==='wood'?'#8B4513':r.type==='stone'?'#888':'#FFD700';
+        ctx.fill(); ctx.strokeStyle='#333'; ctx.lineWidth=2; ctx.stroke();
+    }
+  }
+  
+  // Dibujar Bulldozers
+  for(const b of bulldozers){
+    ctx.save(); ctx.translate(b.x,b.y); ctx.rotate(b.angle+Math.PI/2);
+    
+    const size = b.radius * 2;
+    let imgKey;
+    if(b.type==='red') imgKey = 'bulldozer_red';
+    else if(b.type==='gray') imgKey = 'bulldozer_gray';
+    else if(b.type==='belardi') imgKey = 'belardi';
+    else imgKey = 'bulldozer';
+    
+    const img = images[imgKey];
+    const { drawWidth, drawHeight, x_offset, y_offset } = getProportionalSize(img, size);
+
+    if (img && img.complete) {
+        ctx.drawImage(img, -size/2 + x_offset, -size/2 + y_offset, drawWidth, drawHeight);
+    } else {
+        const color=b.type==='red'?'#e74c3c':b.type==='gray'?'#95a5a6':b.type==='belardi'?'#9b59b6':'#f1c40f';
+        ctx.fillStyle=color;
+        ctx.fillRect(-b.radius/2,-b.radius,b.radius,b.radius*2);
+        ctx.fillStyle='#333';
+        ctx.fillRect(-b.radius/2-4,-b.radius,4,b.radius*2);
+        ctx.fillRect(b.radius/2,-b.radius,4,b.radius*2);
+    }
+    
+    ctx.restore();
+    
+    // Dibujar pausa y selección
+    if(b.paused){ ctx.fillStyle='rgba(255,0,0,0.3)'; ctx.beginPath(); ctx.arc(b.x,b.y,b.radius+5,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#FFF'; ctx.font='bold 12px system-ui'; ctx.textAlign='center'; ctx.fillText('II',b.x,b.y+4); }
+    if(selectedBulldozer===b){ ctx.strokeStyle='#00FF00'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(b.x,b.y,b.radius+5,0,Math.PI*2); ctx.stroke(); }
+  }
+  
+  // Dibujar partículas
+  for(const p of particles){ ctx.save(); ctx.globalAlpha=p.life/60; ctx.fillStyle=p.color; ctx.font='bold 16px system-ui'; ctx.textAlign='center'; ctx.fillText(p.text,p.x,p.y); ctx.restore(); }
+}
+
+
+let lastTime=Date.now();
+function gameLoop(){ const now=Date.now(), dt=now-lastTime; lastTime=now; update(dt); draw(); requestAnimationFrame(gameLoop); }
+
+loadImages().then(() => {
+    updateSaveSlotLabels();
+    
+    // Intenta cargar la Ranura 1 de forma silenciosa. Si no hay, inicia un juego nuevo.
+    const gameLoaded = loadGame(1, true); 
+    
+    if (!gameLoaded) {
+        initializeNewGame(); // Inicia una partida nueva
+    }
+    
+    gameLoop();
+});
+</script>
+</body>
+</html>
